@@ -1,12 +1,15 @@
 [package]
 name = "nhentai_dl"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 reqwest = {version = "0.11", features=["blocking"]}
 scraper = "0.13"
 image = "0.24"
 clap = {version = "3", features=["derive"]}
+colored = "2"
+question = "0.2"
+crossterm = "0.23"
+ctrlc = {version = "3", features = ["termination"]}
+# cloudflare-bypasser = "0.2"
