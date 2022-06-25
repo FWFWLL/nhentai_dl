@@ -1,3 +1,5 @@
+use std::io::{stdout, Write};
+
 use clap::Parser;
 
 /// Download doujinshi from nhentai.net
@@ -13,6 +15,8 @@ fn main() {
 
 	let pages = fetch_pages(args.code);
 
+	println!("{}", pages.len());
+
 	if pages.len() > 0 {
 		println!("Found {} pages", pages.len());
 		std::fs::create_dir(format!("{}", args.code)).unwrap();
@@ -22,16 +26,17 @@ fn main() {
 
 	for (i, url) in pages.iter().enumerate() {
 		print!("Page {} ", i + 1);
+		stdout().flush().unwrap();
 		download_image(fetch_image_url(url.to_string()), format!("{}/{i}.png", args.code));
 	}
 }
 
 fn fetch_pages(code: u32) -> Vec<String> {
-	let url = format!("https://nhentai.net/g/{}", code);
+	let url = format!("https://nhentai.to/g/{}/", code);
 	let response = reqwest::blocking::get(url).unwrap().text().unwrap();
 	let document = scraper::Html::parse_document(&response);
-	let page_selector = scraper::Selector::parse("div.thumb-container > a").unwrap();
-	let pages: Vec<String> = document.select(&page_selector).map(|elem| format!("https://nhentai.net{}", elem.value().attr("href").unwrap())).collect();
+	let page_selector = scraper::Selector::parse("a.gallerythumb").unwrap();
+	let pages: Vec<String> = document.select(&page_selector).map(|elem| format!("https://nhentai.to{}", elem.value().attr("href").unwrap())).collect();
 	return pages
 }
 
