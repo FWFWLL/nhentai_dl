@@ -19,7 +19,7 @@ fn main() {
 
 	if pages.len() > 0 {
 		println!("Found {} pages", pages.len());
-		std::fs::create_dir(format!("{}", args.code)).unwrap();
+		std::fs::create_dir_all(format!("{}", args.code)).unwrap();
 	} else {
 		println!("Invalid nhentai code")
 	}
