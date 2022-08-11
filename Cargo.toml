@@ -2,14 +2,11 @@
 name = "nhentai_dl"
 version = "0.2.0"
 edition = "2021"
+authors = ["FWFWLL ffl@vivaldi.net"]
 
 [dependencies]
-reqwest = {version = "0.11", features=["blocking"]}
-scraper = "0.13"
-image = "0.24"
-clap = {version = "3", features=["derive"]}
-colored = "2"
-question = "0.2"
-crossterm = "0.23"
-ctrlc = {version = "3", features = ["termination"]}
-# cloudflare-bypasser = "0.2"
+image = "0.24.3"
+rayon = "1.5.3"
+reqwest = {version = "0.11.11", features = ["blocking"]}
+scraper = "0.13.0"
+tokio = { version = "1.20.1", features = ["full"] }

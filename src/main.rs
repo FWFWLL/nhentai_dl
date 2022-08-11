@@ -1,128 +1,67 @@
-use std::{
-	io::{stdout, Write},
-	sync::mpsc::{self, TryRecvError},
-	thread,
-	time::Duration,
-	process,
-};
+use rayon::prelude::*;
 
-use clap::Parser;
+const BASE_URL: &str = "https://nhentai.to";
 
-use colored::Colorize;
+#[tokio::main]
+async fn main() {
+	// Get code from CLI args
+	let args: Vec<String> = std::env::args().collect();
+	let code = &args[1];
 
-use question::{
-	Question, Answer
-};
+	// Fetch base page
+	let url = format!("{BASE_URL}/g/{code}/");
+	let res = reqwest::get(url)
+		.await.unwrap()
+		.text()
+		.await.unwrap();
 
-use crossterm::{
-	cursor,
-	ExecutableCommand,
-};
-
-/// Download doujinshi from nhentai.net
-#[derive(Parser)]
-struct Args {
-	/// Code used to find doujinshi
-	#[clap(short, long, value_parser)]
-	code: u32,
-}
-
-fn main() {
-	stdout().execute(cursor::Hide).unwrap();
-
-	let args = Args::parse();
-
-	let pages = fetch_pages(args.code);
-
-	if !pages.is_empty() {
-		println!("Found {} pages from {}", pages.len().to_string().yellow(), args.code.to_string().yellow());
-		std::fs::create_dir_all(format!("{}", args.code)).unwrap();
-	} else {
-		println!("Invalid nhentai code")
-	}
-
-	let answer = Question::new(format!("Are you sure you want to download {}?", args.code.to_string().yellow()).as_str())
-		.yes_no()
-		.until_acceptable()
-		.default(Answer::YES)
-		.show_defaults()
-		.ask();
-
-	/* Handle CTRL+C signal */
-	ctrlc::set_handler(move || {
-		print!("{} {}", String::from('✗').red(), "Interrupted".bright_red());
-		stdout().execute(cursor::Show).unwrap();
-		process::exit(0);
-	}).unwrap();
-
-	if answer == Some(Answer::YES) {
-		download_images(args, pages);
-	}
-
-	stdout().execute(cursor::Show).unwrap();
-}
-
-fn fetch_pages(code: u32) -> Vec<String> {
-	let url = format!("https://nhentai.to/g/{}/", code);
-	let response = reqwest::blocking::get(url).unwrap().text().unwrap();
-	let document = scraper::Html::parse_document(&response);
+	// Parse base page
+	let doc = scraper::Html::parse_fragment(&res);
 	let page_selector = scraper::Selector::parse("a.gallerythumb").unwrap();
-	let pages: Vec<String> = document.select(&page_selector).map(|elem| format!("https://nhentai.to{}", elem.value().attr("href").unwrap())).collect();
-	pages
-}
 
-fn fetch_image_url(url: String) -> String {
-	let response = reqwest::blocking::get(url).unwrap().text().unwrap();
-	let document = scraper::Html::parse_fragment(&response);
-	let img_selector = scraper::Selector::parse("section#image-container > a > img").unwrap();
-	let img_url = String::from(document.select(&img_selector).next().unwrap().value().attr("src").unwrap());
-	img_url
-}
+	// Grab urls of pages
+	let page_urls: Vec<String> = doc.select(&page_selector).map(|elem| {
+		format!("{BASE_URL}/{}", elem.value().attr("href").unwrap())
+	}).collect();
 
-fn download_image(url: String, file_name: String) {
-	let img_bytes = reqwest::blocking::get(url).unwrap().bytes().unwrap();
-	let img = image::load_from_memory(&img_bytes).unwrap();
-	img.save(&file_name).unwrap();
-}
-
-fn download_images(args: Args, pages: Vec<String>) {
-	let (tx, rx) = mpsc::channel();
-
-	for (i, url) in pages.into_iter().enumerate() {
-		let tx = tx.clone();
-
-		thread::spawn(move || {
-			download_image(fetch_image_url(url.to_string()), format!("{}/{i}.png", args.code));
-			tx.send(()).unwrap();
-		});
-
-		let mut counter = 0;
-
-		loop {
-			let stage = match counter % 6 {
-				0 => '⠏',
-				1 => '⠛',
-				2 => '⠹',
-				3 => '⠼',
-				4 => '⠶',
-				5 => '⠧',
-				_ => ' ',
-			};
-
-			print!("{} {} Page {}...\r", String::from(stage).blue(), "Downloading".bright_cyan(), (i + 1).to_string().yellow());
-
-			stdout().flush().unwrap();
-
-			thread::sleep(Duration::from_millis(100));
-
-			counter += 1;
-
-			match rx.try_recv() {
-				Ok(_) | Err(TryRecvError::Disconnected) => {break;}
-				Err(TryRecvError::Empty) => {}
-			}
-		}
-
-		println!("{} {} Page {} saved as {}/{i}.png", String::from('✓').green(), "   Finished".bright_green(), (i + 1).to_string().yellow(), args.code);
+	// Check if the code is valid by checking if page_urls has at least 1 page url
+	if !page_urls.is_empty() {
+		println!("Found {} pages from {}", page_urls.len(), code);
+		std::fs::create_dir_all(code).unwrap(); // Create destination directory for images
+	} else {
+		print!("Code returned 0 pages");
 	}
+
+	// Iterate over page urls using rayon to get the urls of the actual images we want to download
+	let img_urls: Vec<String> = page_urls.par_iter().map(|url| {
+		let res = reqwest::blocking::get(url)
+			.unwrap()
+			.text()
+			.unwrap();
+
+		// Fetch image page
+		let doc = scraper::Html::parse_fragment(&res);
+		let img_selector = scraper::Selector::parse("section#image-container > a > img").unwrap();
+
+		// Grab src-attribute from images
+		let img_url = doc.select(&img_selector).next().unwrap().value().attr("src").unwrap();
+
+		img_url.to_string()
+	}).collect();
+
+	// Iterate over image urls using rayon and save the images as PNGs
+	img_urls.par_iter().enumerate().map(|(i, url)| {
+		let dst = format!("{code}/{i}.png");
+
+		let img_bytes = reqwest::blocking::get(url.to_string())
+			.unwrap()
+			.bytes()
+			.unwrap();
+
+		image::load_from_memory(&img_bytes).unwrap().save(&dst).unwrap();
+
+		println!("{:0>2?} - Saved page {} as {dst}", std::thread::current().id(), i + 1);
+	}).collect::<()>();
+
+	println!("Finished downloading {} images", img_urls.len());
 }
