@@ -1,5 +1,3 @@
-#![deny(elided_lifetimes_in_paths)]
-
 use std::{
 	io::{stdout, Write},
 	sync::mpsc::{self, TryRecvError},
@@ -36,7 +34,7 @@ fn main() {
 
 	let pages = fetch_pages(args.code);
 
-	if pages.len() > 0 {
+	if !pages.is_empty() {
 		println!("Found {} pages from {}", pages.len().to_string().yellow(), args.code.to_string().yellow());
 		std::fs::create_dir_all(format!("{}", args.code)).unwrap();
 	} else {
@@ -66,11 +64,11 @@ fn main() {
 
 fn fetch_pages(code: u32) -> Vec<String> {
 	let url = format!("https://nhentai.to/g/{}/", code);
-	let response = reqwest::blocking::get(url).unwrap().text().expect(format!("Request to https://nhentai.to/g/{}/ timed out", code).as_str());
+	let response = reqwest::blocking::get(url).unwrap().text().unwrap();
 	let document = scraper::Html::parse_document(&response);
 	let page_selector = scraper::Selector::parse("a.gallerythumb").unwrap();
 	let pages: Vec<String> = document.select(&page_selector).map(|elem| format!("https://nhentai.to{}", elem.value().attr("href").unwrap())).collect();
-	return pages
+	pages
 }
 
 fn fetch_image_url(url: String) -> String {
@@ -78,7 +76,7 @@ fn fetch_image_url(url: String) -> String {
 	let document = scraper::Html::parse_fragment(&response);
 	let img_selector = scraper::Selector::parse("section#image-container > a > img").unwrap();
 	let img_url = String::from(document.select(&img_selector).next().unwrap().value().attr("src").unwrap());
-	return img_url
+	img_url
 }
 
 fn download_image(url: String, file_name: String) {
@@ -124,7 +122,7 @@ fn download_images(args: Args, pages: Vec<String>) {
 				Err(TryRecvError::Empty) => {}
 			}
 		}
-		
-		println!("{} {} Page {} saved as {}", String::from('✓').green(), "   Finished".bright_green(), (i + 1).to_string().yellow(), format!("{}/{i}.png", args.code));
+
+		println!("{} {} Page {} saved as {}/{i}.png", String::from('✓').green(), "   Finished".bright_green(), (i + 1).to_string().yellow(), args.code);
 	}
 }
