@@ -5,8 +5,9 @@ const BASE_URL: &str = "https://nhentai.to";
 #[tokio::main]
 async fn main() {
 	// Get code from CLI args
+	// If no code was passed as an argument default to 0
 	let args: Vec<String> = std::env::args().collect();
-	let code = &args[1];
+	let code = if args.len() <= 1 {"0"} else {&args[1]};
 
 	// Fetch base page
 	let url = format!("{BASE_URL}/g/{code}/");
@@ -21,23 +22,32 @@ async fn main() {
 
 	// Grab urls of pages
 	let page_urls: Vec<String> = doc.select(&page_selector).map(|elem| {
-		format!("{BASE_URL}/{}", elem.value().attr("href").unwrap())
+		format!("{BASE_URL}{}", elem.value().attr("href").unwrap())
 	}).collect();
 
 	// Check if the code is valid by checking if page_urls has at least 1 page url
 	if !page_urls.is_empty() {
-		println!("Found {} pages from {}", page_urls.len(), code);
+		println!("Found {} pages from {code}", page_urls.len());
 		std::fs::create_dir_all(code).unwrap(); // Create destination directory for images
 	} else {
-		print!("Code returned 0 pages");
+		println!("Found 0 pages from {code}");
 	}
 
 	// Iterate over page urls using rayon to get the urls of the actual images we want to download
-	let img_urls: Vec<String> = page_urls.par_iter().map(|url| {
-		let res = reqwest::blocking::get(url)
-			.unwrap()
-			.text()
-			.unwrap();
+	page_urls.par_iter().enumerate().map(|(i, url)| {
+		// LMAO just retry if it fails the first time
+		// A thread is unlikely to timeout twice in a row
+		// It could happen though...
+		let res = match reqwest::blocking::get(url) {
+			Ok(res) => res.text().unwrap(),
+			Err(_) => {
+				println!("{:0>2?} - Connection to {url} timed out, retrying...", std::thread::current().id());
+				reqwest::blocking::get(url)
+					.unwrap()
+					.text()
+					.unwrap()
+			},
+		};
 
 		// Fetch image page
 		let doc = scraper::Html::parse_fragment(&res);
@@ -46,22 +56,21 @@ async fn main() {
 		// Grab src-attribute from images
 		let img_url = doc.select(&img_selector).next().unwrap().value().attr("src").unwrap();
 
-		img_url.to_string()
-	}).collect();
+		println!("{:0>2?} - Discovered {img_url}", std::thread::current().id());
 
-	// Iterate over image urls using rayon and save the images as PNGs
-	img_urls.par_iter().enumerate().map(|(i, url)| {
+		// Save images as PNGs
 		let dst = format!("{code}/{i}.png");
-
-		let img_bytes = reqwest::blocking::get(url.to_string())
+		let img_bytes = reqwest::blocking::get(img_url)
 			.unwrap()
 			.bytes()
 			.unwrap();
-
-		image::load_from_memory(&img_bytes).unwrap().save(&dst).unwrap();
+		image::load_from_memory(&img_bytes)
+			.unwrap()
+			.save(&dst)
+			.unwrap();
 
 		println!("{:0>2?} - Saved page {} as {dst}", std::thread::current().id(), i + 1);
 	}).collect::<()>();
 
-	println!("Finished downloading {} images", img_urls.len());
+	println!("Finished downloading {} images", page_urls.len());
 }
