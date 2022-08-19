@@ -12,9 +12,11 @@ async fn main() {
 	// Fetch base page
 	let url = format!("{BASE_URL}/g/{code}/");
 	let res = reqwest::get(url)
-		.await.unwrap()
+		.await
+		.unwrap()
 		.text()
-		.await.unwrap();
+		.await
+		.unwrap();
 
 	// Parse base page
 	let doc = scraper::Html::parse_fragment(&res);
@@ -42,7 +44,12 @@ async fn main() {
 		let img_selector = scraper::Selector::parse("section#image-container > a > img").unwrap();
 
 		// Grab src-attribute from images
-		let img_url = doc.select(&img_selector).next().unwrap().value().attr("src").unwrap();
+		let img_url = doc.select(&img_selector)
+			.next()
+			.unwrap()
+			.value()
+			.attr("src")
+			.unwrap();
 
 		println!("{:0>2?} - Discovered {img_url}", std::thread::current().id());
 
