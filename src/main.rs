@@ -35,19 +35,7 @@ async fn main() {
 
 	// Iterate over page urls using rayon to get the urls of the actual images we want to download
 	page_urls.par_iter().enumerate().map(|(i, url)| {
-		// LMAO just retry if it fails the first time
-		// A thread is unlikely to timeout twice in a row
-		// It could happen though...
-		let res = match reqwest::blocking::get(url) {
-			Ok(res) => res.text().unwrap(),
-			Err(_) => {
-				println!("{:0>2?} - Connection to {url} timed out, retrying...", std::thread::current().id());
-				reqwest::blocking::get(url)
-					.unwrap()
-					.text()
-					.unwrap()
-			},
-		};
+		let res = fetch_page(url);
 
 		// Fetch image page
 		let doc = scraper::Html::parse_fragment(&res);
@@ -73,4 +61,17 @@ async fn main() {
 	}).collect::<()>();
 
 	println!("Finished downloading {} images", page_urls.len());
+}
+
+// Function fetches the page using the url
+// If the reqwest times out then we try again
+// This could soft lock the program...
+fn fetch_page(url: &str) -> String {
+	match reqwest::blocking::get(url) {
+		Ok(res) => res.text().unwrap(),
+		Err(_) => {
+			println!("{} - Connection timed out, retrying...", format!("{:0>2?}", std::thread::current().id()).red());
+			fetch_page(url)
+		},
+	}
 }
