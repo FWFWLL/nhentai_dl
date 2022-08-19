@@ -1,3 +1,4 @@
+use colored::Colorize;
 use rayon::prelude::*;
 
 const BASE_URL: &str = "https://nhentai.to";
@@ -29,7 +30,7 @@ async fn main() {
 
 	// Check if the code is valid by checking if page_urls has at least 1 page url
 	if !page_urls.is_empty() {
-		println!("Found {} pages from {code}", page_urls.len());
+		println!("Found {} pages from {}", page_urls.len().to_string().yellow(), code.yellow());
 		std::fs::create_dir_all(code).unwrap(); // Create destination directory for images
 	} else {
 		println!("Found 0 pages from {code}");
@@ -51,7 +52,7 @@ async fn main() {
 			.attr("src")
 			.unwrap();
 
-		println!("{:0>2?} - Discovered {img_url}", std::thread::current().id());
+		println!("{} - Fetching {}", format!("{:0>2?}", std::thread::current().id()).red(), img_url.bright_cyan());
 
 		// Save images as PNGs
 		let dst = format!("{code}/{i}.png");
@@ -64,10 +65,10 @@ async fn main() {
 			.save(&dst)
 			.unwrap();
 
-		println!("{:0>2?} - Saved page {} as {dst}", std::thread::current().id(), i + 1);
+		println!("{} - Saved page {} as {}", format!("{:0>2?}", std::thread::current().id()).red(), (i + 1).to_string().yellow(), dst.bright_cyan());
 	}).collect::<()>();
 
-	println!("Finished downloading {} images", page_urls.len());
+	println!("Finished downloading {} images", page_urls.len().to_string().yellow());
 }
 
 // Function fetches the page using the url
