@@ -1,5 +1,5 @@
 # nhentai_dl
-Simple CLI written in Rust for downloading doujinshi from [nhentai](https://nhentai.net).
+Simple CLI written in R-word for downloading doujinshi from [nhentai](https://nhentai.net).
 
 
 ## Usage
